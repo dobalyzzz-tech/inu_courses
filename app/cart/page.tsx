@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@/components/providers/AuthContext";
-import { ShoppingCart, Trash2, ArrowLeft, X, CreditCard, BookOpen, GraduationCap, DollarSign } from "lucide-react";
+import { ShoppingCart, Trash2, ArrowLeft, X, CreditCard, BookOpen, GraduationCap, DollarSign, ClipboardList, CheckCircle, AlertCircle, CreditCard as CreditCardIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
@@ -11,12 +11,37 @@ export default function CartPage() {
   const router = useRouter();
   const [isRegistering, setIsRegistering] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<any>(null);
+  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [payerName, setPayerName] = useState("");
+  const [payerEmail, setPayerEmail] = useState("");
+  const [payerNameError, setPayerNameError] = useState("");
+  const [payerEmailError, setPayerEmailError] = useState("");
+
+  useEffect(() => {
+    if (user) {
+      // localStorage에 저장된 정보가 있으면 우선 사용, 없으면 Google 계정 정보 사용
+      const savedName = localStorage.getItem("payer_name");
+      const savedEmail = localStorage.getItem("payer_email");
+      const name = savedName || user.user_metadata?.full_name || user.user_metadata?.name || "";
+      const email = savedEmail || user.email || "";
+      setPayerName(name);
+      setPayerEmail(email);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (!loading && !user) {
       router.replace("/");
     }
   }, [loading, user, router]);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   if (loading) {
     return (
@@ -30,25 +55,114 @@ export default function CartPage() {
 
   const formatCurrency = (val: number) => (val ? val.toLocaleString() + "원" : "무료");
 
-  const handleRegister = async () => {
+  const handleRegister = () => {
+    if (!user || cartItems.length === 0) return;
+    setShowPaymentModal(true);
+  };
+
+  const handleProceedToPayment = async () => {
+    if (!user) return;
+    const currentUser = user;
+    let valid = true;
+    setPayerNameError("");
+    setPayerEmailError("");
+
+    if (!payerName.trim()) {
+      setPayerNameError("이름을 입력해 주세요.");
+      valid = false;
+    }
+
+    if (!payerEmail.trim()) {
+      setPayerEmailError("이메일을 입력해 주세요.");
+      valid = false;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payerEmail)) {
+      setPayerEmailError("올바른 이메일 형식이 아닙니다.");
+      valid = false;
+    }
+
+    if (!valid) return;
+
+    // 입력 정보 localStorage에 저장
+    localStorage.setItem("payer_name", payerName.trim());
+    localStorage.setItem("payer_email", payerEmail.trim());
+
+    setShowPaymentModal(false);
     setIsRegistering(true);
-    await new Promise((r) => setTimeout(r, 2000));
-    setIsRegistering(false);
-    alert("🎉 수강신청이 성공적으로 완료되었습니다!");
-    clearCart();
+
+    try {
+      const tossPayments = await import("@tosspayments/tosspayments-sdk").then(
+        (m) => m.loadTossPayments(process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY!)
+      );
+
+      const orderId = "INU-" + Date.now();
+
+      // 결제 전 장바구니 데이터를 sessionStorage에 저장 (success 페이지에서 사용)
+      sessionStorage.setItem("pending_cart_items", JSON.stringify(cartItems));
+      sessionStorage.setItem("pending_total_credits", String(totalCredits));
+      sessionStorage.setItem("pending_order_id", orderId);
+
+      const payment: any = tossPayments.payment({ customerKey: currentUser.id });
+
+      await payment.requestPayment({
+        method: "CARD",
+        amount: { value: totalPrice, currency: "KRW" },
+        orderId: orderId,
+        orderName: "인천대학교 기초교육원 교양 교과목 결제",
+        customerName: payerName.trim(),
+        customerEmail: payerEmail.trim(),
+        successUrl: `${window.location.origin}/payment/success`,
+        failUrl: `${window.location.origin}/payment/fail`,
+        windowTarget: "self",
+      });
+
+      setIsRegistering(false);
+    } catch (err: any) {
+      setToast({ type: "error", message: err.message || "결제창을 불러오지 못했습니다." });
+      console.error("결제 오류:", err);
+      setIsRegistering(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gray-50/50 pb-20">
+      {/* Toast */}
+      {toast && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] animate-in fade-in slide-in-from-top-2 duration-300">
+          <div
+            className={`flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border backdrop-blur-xl ${
+              toast.type === "success"
+                ? "bg-emerald-50/95 border-emerald-200/60 text-emerald-800"
+                : "bg-red-50/95 border-red-200/60 text-red-800"
+            }`}
+          >
+            {toast.type === "success" ? (
+              <CheckCircle className="w-5 h-5 text-emerald-500 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+            )}
+            <span className="text-sm font-semibold">{toast.message}</span>
+          </div>
+        </div>
+      )}
+
       {/* Back Button */}
       <div className="max-w-7xl mx-auto px-8 pt-28 pb-6">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-500 hover:text-zinc-800 transition-colors group"
-        >
-          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-          교과목 둘러보기
-        </Link>
+        <div className="flex items-center justify-between">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-500 hover:text-zinc-800 transition-colors group"
+          >
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+            교과목 둘러보기
+          </Link>
+          <Link
+            href="/orders"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-500 hover:text-indigo-600 transition-colors"
+          >
+            <ClipboardList className="w-4 h-4" />
+            주문내역
+          </Link>
+        </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-8">
@@ -243,6 +357,136 @@ export default function CartPage() {
                 className="px-5 py-2.5 text-sm font-semibold text-zinc-700 bg-white border border-zinc-300 hover:bg-zinc-50 rounded-xl transition-colors"
               >
                 닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Info Modal */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={() => setShowPaymentModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+            {/* Step Indicator */}
+            <div className="px-6 pt-5 pb-3 bg-zinc-50/50 border-b border-zinc-100">
+              <div className="flex items-center justify-center gap-1">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-6 h-6 rounded-full bg-indigo-600 text-white text-[11px] font-bold flex items-center justify-center">1</div>
+                  <span className="text-[11px] font-semibold text-indigo-600">정보입력</span>
+                </div>
+                <div className="w-8 h-px bg-indigo-300 mx-1" />
+                <div className="flex items-center gap-1.5">
+                  <div className="w-6 h-6 rounded-full bg-zinc-200 text-zinc-500 text-[11px] font-bold flex items-center justify-center">2</div>
+                  <span className="text-[11px] font-semibold text-zinc-400">결제</span>
+                </div>
+                <div className="w-8 h-px bg-zinc-200 mx-1" />
+                <div className="flex items-center gap-1.5">
+                  <div className="w-6 h-6 rounded-full bg-zinc-200 text-zinc-500 text-[11px] font-bold flex items-center justify-center">3</div>
+                  <span className="text-[11px] font-semibold text-zinc-400">완료</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100">
+              <div className="flex items-center gap-2">
+                <CreditCardIcon className="w-5 h-5 text-indigo-600" />
+                <h2 className="text-lg font-bold text-zinc-900">결제자 정보 입력</h2>
+              </div>
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="p-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              {/* 결제 금액 */}
+              <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 flex items-center justify-between">
+                <span className="text-sm font-semibold text-zinc-700">결제 금액</span>
+                <span className="text-xl font-extrabold text-indigo-600">{formatCurrency(totalPrice)}</span>
+              </div>
+
+              {/* 주문 상품 검토 */}
+              <div>
+                <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">주문 상품</h3>
+                <div className="space-y-2">
+                  {cartItems.slice(0, 5).map((item: any) => (
+                    <div key={item["순번"]} className="flex items-center justify-between py-1.5">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-zinc-800 truncate">{item["교과목명"]}</p>
+                        <p className="text-[11px] text-zinc-400">{item["담당교수"] || "미정"} 교수 · {item["학점"]}학점</p>
+                      </div>
+                      <span className="text-xs font-semibold text-indigo-600 shrink-0 ml-3">{formatCurrency(item["수강가격"])}</span>
+                    </div>
+                  ))}
+                  {cartItems.length > 5 && (
+                    <p className="text-[11px] text-zinc-400 text-center pt-1">외 {cartItems.length - 5}건</p>
+                  )}
+                </div>
+              </div>
+
+              {/* 입력 필드 */}
+              <div className="pt-2 space-y-4">
+                <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">결제자 정보</h3>
+                <div>
+                  <label className="block text-sm font-semibold text-zinc-700 mb-1.5">이름</label>
+                  <input
+                    type="text"
+                    value={payerName}
+                    onChange={(e) => {
+                      setPayerName(e.target.value);
+                      if (payerNameError) setPayerNameError("");
+                    }}
+                    placeholder="이름을 입력해 주세요"
+                    className={`w-full px-4 py-3 rounded-xl border text-sm font-medium outline-none transition-colors ${
+                      payerNameError
+                        ? "border-red-300 bg-red-50/50 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                        : "border-zinc-200 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                    }`}
+                  />
+                  {payerNameError && (
+                    <p className="text-xs text-red-500 font-medium mt-1.5 ml-1">{payerNameError}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-zinc-700 mb-1.5">이메일</label>
+                  <input
+                    type="email"
+                    value={payerEmail}
+                    onChange={(e) => {
+                      setPayerEmail(e.target.value);
+                      if (payerEmailError) setPayerEmailError("");
+                    }}
+                    placeholder="이메일을 입력해 주세요"
+                    className={`w-full px-4 py-3 rounded-xl border text-sm font-medium outline-none transition-colors ${
+                      payerEmailError
+                        ? "border-red-300 bg-red-50/50 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                        : "border-zinc-200 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                    }`}
+                  />
+                  {payerEmailError && (
+                    <p className="text-xs text-red-500 font-medium mt-1.5 ml-1">{payerEmailError}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-zinc-100 bg-zinc-50 flex justify-end gap-3">
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="px-5 py-2.5 text-sm font-semibold text-zinc-700 bg-white border border-zinc-300 hover:bg-zinc-50 rounded-xl transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleProceedToPayment}
+                className="px-5 py-2.5 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-colors shadow-sm flex items-center gap-2"
+              >
+                <CreditCardIcon className="w-4 h-4" />
+                {formatCurrency(totalPrice)} 결제하기
               </button>
             </div>
           </div>

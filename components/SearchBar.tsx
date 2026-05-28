@@ -57,7 +57,7 @@ export default function SearchBar() {
       
       {/* Floating Island SearchBar */}
       <div 
-        className={`fixed left-4 right-28 lg:left-[316px] lg:right-[18rem] z-50 pt-4 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+        className={`fixed left-4 right-28 lg:left-1/2 lg:-translate-x-1/2 lg:w-[960px] lg:right-auto z-50 pt-4 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${
           isVisible ? "translate-y-0 opacity-100" : "-translate-y-[120%] opacity-0 pointer-events-none"
         }`}
         onMouseEnter={() => setIsVisible(true)}
