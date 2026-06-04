@@ -64,14 +64,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     // 순번 자동 생성: 현재 최대값 + 1
-    const { data: maxRow } = await supabase
+    const maxRow = await supabase
       .from('courses')
       .select('순번')
       .order('순번', { ascending: false })
       .limit(1)
       .single();
 
-    const nextSeq = (maxRow?.순번 ?? 0) + 1;
+    const maxSeq = ((maxRow.data as any)?.순번 ?? 0) + 1;
+    const nextSeq = maxSeq;
 
     const { error } = await supabase.from('courses').insert([{ ...body, 순번: nextSeq }]);
     if (error) throw error;
