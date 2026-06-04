@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Menu } from "lucide-react";
+import { ChevronDown, ChevronRight, Menu, Lock } from "lucide-react";
 import { COURSE_MENU_DATA } from "@/lib/data/menu";
 import Link from "next/link";
 
@@ -70,6 +70,20 @@ export default function Sidebar() {
           );
         })}
       </nav>
+
+      {/* 관리자 버튼 */}
+      <div className="px-5 pb-4 pt-1 border-t border-zinc-800/40">
+        <button
+          onClick={() => {
+            const event = new CustomEvent("open-admin-modal");
+            window.dispatchEvent(event);
+          }}
+          className="flex items-center justify-center gap-1.5 w-full py-1.5 text-[11px] font-medium text-zinc-500/60 hover:text-zinc-400/60 hover:bg-zinc-800/20 rounded-lg transition-all duration-200"
+        >
+          <Lock className="w-2.5 h-2.5" />
+          관리자
+        </button>
+      </div>
     </aside>
   );
 }
