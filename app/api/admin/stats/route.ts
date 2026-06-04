@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
         .in('순번', courseIds);
 
       const courseCategory: Record<number, string> = {};
-      for (const c of courses ?? []) {
+      for (const c of (courses ?? []) as any[]) {
         courseCategory[c.순번] = c.이수구분 ?? '기타';
       }
 
